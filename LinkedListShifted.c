@@ -1,4 +1,4 @@
-/** ArrayLinkedList.cpp
+/** LinkedListShifted.c
 *
 * This code implements a sorted linked list using an array as the underlying data structure.
 * The underlying implementation is to be hidden from the end user.  They should interact
@@ -12,15 +12,20 @@
 #include <stdio.h>
 
 /* The maximum entries in our linked list / array */
-#define MAX_LINKED_LIST_SIZE 65534 
+#define MAX_LINKED_LIST_SIZE 10 
+
+/* *** INTERNAL USE ONLY *** In an in-line implementation the root node 
+ * is always 0
+ */
+#define ROOTNODE 0
 
 /* *** INTERNAL USE ONLY *** Has the list been initialized */
-static int initialized = 0;        
+static int initialized = 0;   
 
-/* *** INTERNAL USE ONLY *** The array index of the node that is the current head of the list */
-static int rootNode    = 0;       
-								   
-
+/* *** INTERNAL USE ONLY *** Keep track of the last item placed
+* so we can optimize the shifting slightly and only shift what is needed.
+*/
+static int lastUsed = -1;
 
 
 /**
@@ -54,14 +59,7 @@ struct Node
 
 	/** The value that this linked list node contains */
     int  value;     
-
-	/** The array index of the node in front of this one in the list. -1 for none */
-	int  previous;  
-
-	/** The array index of the node behind this one in the list. -1 for none */
-	int  next;      
 	
-
 };
 
 /**
@@ -132,67 +130,71 @@ static struct Node LinkedList[MAX_LINKED_LIST_SIZE];
  * End Users should call insertNode( int node ) instead
  * 
  * This function will insert the node located at "current" right
- * after the node indexed by "previous".  Note: This does not 
- * mean the array is shuffled.  Only the next LinkedList[previous].next
- * and LinkedList [ LinkedList[previous].next ].previous values
- * are updated to reflect the new linkage.  The array order
- * does not reflect the order in the linked list.  The linked list
- * order is determined by following the first node in the LinkedList,
- * LinkedList[rootNode] and then traversing using the next members of 
- * the structure until next == -1 which means you've traversed the
- * entire list.
+ * after the node indexed by "previous".  
+ * 
+ * We will shuffle every node after this spot one index along the array 
+ * and make a hole.
+ * 
  * 
  * \param previous  The index of the node that will be
  *                  previous to this node in the list
- * \return current  The index of the current node that
- *                  will be inserted.
+ *
  * 
  * \return 0 
  */
-int insertNodeInternal(int previous, int current)
+int insertNodeInternal(int previous, int value )
 {
-	/**
-	 *  Initialize our current links to an invalid index
-	 *  -1 signifies the end of the list on either end
-	 */
- 	LinkedList[current].previous = -1;
-	LinkedList[current].next = -1;
+	int i = 0;
+
+	if( initialized && previous < 0 || previous >= MAX_LINKED_LIST_SIZE )
+	{
+		printf( "ERROR: Tried to insert a node beyond our bounds %d\n", previous);
+		return -1;
+	}
 
     /**
-	 * Make sure we have a previous node.  If there
-	 * was no previous node then the previous value
-	 * would be -1
-	 */
-	if (previous >= 0)
+     * On the first node being inserted make sure that
+     * the entire list has been initialized and then
+     * set the initialized flag to we don't do this initialization
+     * again.  
+     */
+	if (initialized == 0)
 	{
-		int temp;
-		/**
-		 * Connect the current node with the previous node
-		 * if it exists and store off previous->next.
-		 * Then set previous->next to current
-		 */
-		LinkedList[current].previous = previous;
+		int i = 0;
+		for( i = ROOTNODE; i < MAX_LINKED_LIST_SIZE; i++)
+		{
+			LinkedList[i].in_use = 0;
+		}
+	    initialized = 1;
+	}
 
-		temp = LinkedList[previous].next;
-		LinkedList[previous].next = current;
-		LinkedList[current].next = temp;
-	
-	}
-	else if ( LinkedList[rootNode].previous == -1 && LinkedList[rootNode].next == -1)
-	{
-		/* Do nothing since this is the first node in the linked list. */
-	}
 	/**
-	 * If we have a previous value -1 we're replacing the root node
-	 * so after inserting it make sure to update the rootNode
-	 */
+	 * Shift everything down and make room for the new node. But we only
+	 * need to shift from lastUsed to previous + 1
+	*/
+printf("lastUsed %d previous %d\n", lastUsed, previous );
+    if( lastUsed == -1 )
+	{
+        LinkedList[i].value  = value;
+		LinkedList[i].in_use = 1;
+		lastUsed = i;
+	}
 	else
 	{
-		LinkedList[rootNode].previous = current;
-		LinkedList[current].previous = -1;
-		LinkedList[current].next = rootNode;
-		rootNode = current;
-	}
+		printf("Starting for loop %d %d \n", lastUsed, previous);
+		for( i = 10; i > previous; i-- )
+		{
+			printf("Shifting value %d from %d to %d\n", LinkedList[i].value, i, i+1);
+			LinkedList[i+1].value  = LinkedList[i].value;
+			LinkedList[i+1].in_use = LinkedList[i].in_use;
+			
+			printf("Inserted into %d\n",i);
+		}  
+		printf("Putting %d in %d\n", LinkedList[previous].value, previous);
+		LinkedList[previous+1].in_use = 1;
+		LinkedList[previous+1].value = value;
+		lastUsed = previous+1;
+	}  
 
 	return 0;
 }
@@ -223,6 +225,7 @@ int insertNodeInternal(int previous, int current)
  */
 int removeNodeInternal(int node)
 {
+	#if 0
 	/**
 	 * Check to make sure we haven't tried to insert a node beyond the bounds of
 	 * the array.  This shouldn't ever happen.
@@ -251,12 +254,12 @@ int removeNodeInternal(int node)
 
     /**	
 	  * If we are removing the head of the list then we also need
-	  * to make sure to update the rootNode variable as well so that
+	  * to make sure to update the ROOTNODE variable as well so that
 	  * it points to the new head of the list.
 	  */
-	if (node == rootNode)
+	if (node == ROOTNODE)
 	{
-		rootNode = LinkedList[rootNode].next;
+		ROOTNODE = LinkedList[ROOTNODE].next;
 	}
 
 	/**
@@ -275,7 +278,7 @@ int removeNodeInternal(int node)
 	 */
     LinkedList[node].next = -1;
 	LinkedList[node].previous = -1;
-
+#endif
 	return 0;
 }
 
@@ -298,10 +301,11 @@ int removeNodeInternal(int node)
  */
 int removeNode(int value)
 {
+	#if 0
 	/**
 	  * We start searching for the node to remove at the root of the linked list
       */
-	int index = rootNode;
+	int index = ROOTNODE;
 
    /**
     * Iterate over the linked list and find the node
@@ -317,8 +321,8 @@ int removeNode(int value)
 		{
 			return removeNodeInternal(index);
 		}
-		index = LinkedList[index].next;
 	}
+	#endif
 	return -1;
 }
 
@@ -340,63 +344,41 @@ int removeNode(int value)
  */
 int insertNode(int value)
 {
-     /** Index into the array where we will put this new node */
-	int index    =  findFreeNodeInternal();   
+	/*  Hold the index of the node we will insert behind */
+	int previous = -1;
 
-     /** Set current to the rootNode so we start searching from the beginning */
-	int current  =  rootNode;                 
-	                                          
-    /** Set previous to -1 since there nothing before the first node in the list */
-	int previous = -1;                          
-	                                          
-    /** Our return value.  -1 on failure. 0 on success. */
-	int ret      = -1;                        
+	/* Return value 0 for success. -1 for failure. */
+	int ret = -1;
+
+	/* Loop variable */
+	int i;
+
+    /**
+     * Since this list is sorted, iterate over the linked list and find which node we  would
+     * fit behind with our value.  Once we have found a spot then the while loop will exit
+     * and previous will have the index of the node we will insert behind.
+     */
+	for( i = ROOTNODE; i < MAX_LINKED_LIST_SIZE; i++ )
+	{
+		if( ( LinkedList[i].in_use && LinkedList[i].value > value ) ||
+		    ( LinkedList[i].in_use == 0 ) )
+		{
+			previous = i;
+			break;
+		}
+	}
 	
-    /**
-     * On the first node being inserted make sure that
-     * the root node has been initialized and then
-     * set the initialized flag to we don't do this initialization
-     * again.
-     */
-	if (initialized == 0)
+	printf("*** Inserting %d in %d\n", value, previous);
+    /** If we found a free node and we haven't run off the end of the list */
+	if (previous >= -1)
 	{
-		LinkedList[0].previous = -1;
-		LinkedList[0].next     = -1;
-		initialized            =  1;
+		ret = insertNodeInternal(previous, value);
 	}
-
-	if (index >= 0)
+    else if ( previous >= MAX_LINKED_LIST_SIZE || previous < 0 )
 	{
-      /**
-       * Since this list is sorted, iterate over the linked list and find which node we would
-       * fit behind with our value.  Once we have found a spot then the while loop will exit
-       * and previous will have the index of the node we will insert behind.
-       */
-		while (current >= 0 && LinkedList[current].in_use && LinkedList[current].value < value)
-		{
-			previous = current;
-			current  = LinkedList[current].next;
-		}
-		
-        /** If we found a free node and we haven't run off the end of the list */
-		if (previous >= -1)
-		{
- 			ret = insertNodeInternal(previous, index);
-		}
-        /** If we ran off the end of the list then insert on the tail of the list */
-		else if( current == -1 )
-		{
-			ret = insertNodeInternal(LinkedList[previous].previous, index);
-		}
+		printf("Error: Tried to insert beyond the bounds of the allocated list.\n");
 
-    /**
-     * Now that our new node is linked in lets set the value and mark this array element
-     * as being used.
-     */
-		LinkedList[index].value = value;
-		LinkedList[index].in_use = 1;
 	}
-
 	return ret;
 }
 
@@ -409,36 +391,41 @@ int insertNode(int value)
  * This function iterates over the list and prints the values in list order.
  * If you need a function to iterate over the linked list in order, this is 
  * how you would do that.
+ * 
+ * Since the array is kept in sorted order, iterating in order over the array
+ * iterates in order.
  *
  */
 void printList()
 {
     /** Start at the root of the linked list */
-	int i = rootNode;
+	int i = 0;
 	
     /** Iterate over the linked list in node order and print the nodes. */
-	while (initialized && i != -1 && LinkedList[i].in_use)
+
+    for( i = ROOTNODE; i < MAX_LINKED_LIST_SIZE; i++ )
 	{
+		if( LinkedList[i].in_use == 0 )
+		{
+			/** This array is not sparse so the first entry which has a 0 value for 
+			 *  in-use means we've reached the end so no need to continue the loop 
+			 */
+			break;
+		}
 		printf("LinkedList[%d]: %d\n", i, LinkedList[i].value);
-		i = LinkedList[i].next;
 	}
 }
 
 int main()
 {
-	insertNode(100); 
-	insertNode(120);
-	insertNode(90);
-	insertNode(110);
 	insertNode(85);
 	insertNode(87);
-	insertNode(84);
-	insertNode(10);
-	insertNode(500);
 
+	insertNode(500);
+    insertNode(100);
 	printf("\n\nPrint the sorted Linked List\n\n");
 	printList();
-
+#if 0
 	removeNode(84);
 	
 	printf("\n\nTrying to remove an array element that is out of bounds\n");
@@ -461,7 +448,7 @@ int main()
 	insertNode(2);
 	printf("\n\nUpdated Linked List with a new root node added with a value of 2 \n\n");
 	printList();
-
+#endif
 	return 0; 
 }
 
